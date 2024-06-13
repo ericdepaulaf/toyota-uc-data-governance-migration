@@ -24,7 +24,8 @@ terraform {
       source = "databricks/databricks"
     }
   }
-}\
+}
+\
 """
 
 TF_TEMPLATE = """\

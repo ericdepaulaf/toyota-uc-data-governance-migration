@@ -11,12 +11,15 @@
 # MAGIC
 
 # COMMAND ----------
-%pip install databricks-sdk==0.25.1 --upgrade
+
+# MAGIC %pip install databricks-sdk==0.25.1 --upgrade
 
 # COMMAND ----------
+
 dbutils.library.restartPython()
 
 # COMMAND ----------
+
 import logging
 import pathlib
 import sys
@@ -38,19 +41,27 @@ from src.principal_permissions import PrincipalPermissions, PrincipalType
 from src.crawl_s3_paths import CrawlS3Paths
 
 # COMMAND ----------
+
 dbutils.widgets.text("dest_table", "users.wagner_silveira.hms_governance_update", "Destination Table Name")
 dbutils.widgets.text("aws_secrets_scope", "hms_exporter_aws_secrets", "AWS Secret Scope")
+dbutils.widgets.dropdown("principal_type", "ALL", ["ALL", "SERVICE_PRINCIPAL", "USER", "GROUP"], "Principal Type")
+dbutils.widgets.text("naming_convention_filter", "", "Naming Convention Filter")
+
 dest_table = dbutils.widgets.get("dest_table").strip()
 aws_secrets_scope = dbutils.widgets.get("aws_secrets_scope").strip()
+principal_type = dbutils.widgets.get("principal_type")
+naming_convention_filter = dbutils.widgets.get("naming_convention_filter")
 
 pattern = re.compile(r"^[a-zA-Z0-9_-]+.[a-zA-Z0-9_-]+.[a-zA-Z0-9_-]+$")
 if not pattern.match(dest_table):
     raise ValueError("Invalid destination table name. Please use the format: catalog.database.table_name")
 
 # COMMAND ----------
+
 start_time = datetime.datetime.now()
 
 # COMMAND ----------
+
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03d [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -59,13 +70,25 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # COMMAND ----------
+
+principal = PrincipalType.ALL
+
+if principal_type == "SERVICE_PRINCIPAL":
+    principal = PrincipalType.SERVICE_PRINCIPAL
+elif principal_type == "USER":
+    principal = PrincipalType.USER
+elif principal_type == "GROUP":
+    principal = PrincipalType.GROUP
+
 p = PrincipalPermissions()
-permissions_df = p.get_principal_permissions(PrincipalType.ALL)
+permissions_df = p.get_principal_permissions(principal, naming_convention_filter)
 
 # COMMAND ----------
-# display(permissions_df)
+
+display(permissions_df)
 
 # COMMAND ----------
+
 permissions_df = permissions_df.withColumn("instance_profile_arn", F.explode(F.col("instance_profile_arn")))
 instance_profiles_rows = permissions_df.select("instance_profile_arn").na.drop().distinct().collect()
 instance_profiles = [row.instance_profile_arn for row in instance_profiles_rows]
@@ -74,11 +97,23 @@ s3 = CrawlS3Paths()(instance_profiles, aws_secrets_scope)
 hms_governance_df = permissions_df.join(s3, ["instance_profile_arn"], how="left")
 
 # COMMAND ----------
-# hms_governance_df.display()
+
+hms_governance_df.display()
 
 # COMMAND ----------
+
+hms_governance_df.count()
+
+# COMMAND ----------
+
 hms_governance_df.write.mode("overwrite").option("mergeSchema", True).saveAsTable(dest_table)
 
 # COMMAND ----------
+
 finish_time = datetime.datetime.now()
 dbutils.notebook.exit(f"HMS governance exporter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select count(*) from users.wagner_silveira.hms_governance_update

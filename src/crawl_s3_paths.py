@@ -133,6 +133,8 @@ class CrawlS3Paths:
                                   aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
                                   aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
                                   aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        
+        #iam_client = boto3.client('iam')
 
         for profile_arn in instance_profile_arn:
 

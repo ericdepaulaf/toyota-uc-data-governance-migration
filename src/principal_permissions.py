@@ -83,7 +83,7 @@ class PrincipalPermissions:
 
         return principal_details
     
-    def _get_ws_principals(self, client: Union[GroupsAPI, UsersAPI, ServicePrincipalsAPI]) -> DataFrame:
+    def _get_ws_principals(self, client: Union[GroupsAPI, UsersAPI, ServicePrincipalsAPI], naming_convention_filter: str = "") -> DataFrame:
         """Get the ws groups from the source table.
 
         Returns:
@@ -112,13 +112,17 @@ class PrincipalPermissions:
                 .dropDuplicates(["displayName", "id"])
                 .selectExpr("displayName", "id", "roles.value as instance_profile_arn")
             )
+
+            if naming_convention_filter != "":
+                ws_principals_df = ws_principals_df.filter(f"displayName like '%{naming_convention_filter}%' ")
+
         except Exception as e:
             self._logger.error(f"Error while fetching workspace principals: {e}")
             raise Exception(e)
         
         return ws_principals_df
 
-    def get_principal_permissions(self, principal_type: PrincipalType) -> DataFrame:
+    def get_principal_permissions(self, principal_type: PrincipalType, naming_convention_filter: str = "") -> DataFrame:
         """
         Get the permissions for a cluster.
         """
@@ -128,16 +132,16 @@ class PrincipalPermissions:
         match principal_type:
             case PrincipalType.ALL:
                 ret = (
-                    self._get_ws_principals(client.groups)
-                    .union(self._get_ws_principals(client.users))
-                    .union(self._get_ws_principals(client.service_principals))
+                    self._get_ws_principals(client.groups, naming_convention_filter)
+                    .union(self._get_ws_principals(client.users, naming_convention_filter))
+                    .union(self._get_ws_principals(client.service_principals, naming_convention_filter))
                 )
             case PrincipalType.GROUP:
-                ret = self._get_ws_principals(client.groups)
+                ret = self._get_ws_principals(client.groups, naming_convention_filter)
             case PrincipalType.USER:
-                ret = self._get_ws_principals(client.users)
+                ret = self._get_ws_principals(client.users, naming_convention_filter)
             case PrincipalType.SERVICE_PRINCIPAL:
-                ret = self._get_ws_principals(client.service_principals)
+                ret = self._get_ws_principals(client.service_principals, naming_convention_filter)
             case _:
                 raise ValueError("Invalid principal type. Please use one of: group, user, service_principal")
         

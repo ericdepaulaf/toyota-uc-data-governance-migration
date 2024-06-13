@@ -8,12 +8,15 @@
 # MAGIC
 
 # COMMAND ----------
-%pip install databricks-sdk==0.25.1 --upgrade
+
+# MAGIC %pip install databricks-sdk==0.25.1 --upgrade
 
 # COMMAND ----------
+
 dbutils.library.restartPython()
 
 # COMMAND ----------
+
 from databricks.sdk import WorkspaceClient
 import datetime
 import logging
@@ -24,6 +27,7 @@ import pathlib
 from pyspark.sql import functions as F, types as T
 
 # COMMAND ----------
+
 path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 path = "/Workspace" + path if not path.startswith("/Workspace") else path
 
@@ -35,9 +39,11 @@ sys.path.append(str(modules_path))
 from utils.consts import *
 
 # COMMAND ----------
+
 start_time = datetime.datetime.now()
 
 # COMMAND ----------
+
 dbutils.widgets.text("src_table", "users.wagner_silveira.hms_governance_update_2", "Source Table Name")
 dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", "Destination Volume for the TF file")
 src_table = dbutils.widgets.get("src_table")
@@ -53,6 +59,7 @@ if not pattern.match(tf_file_dst_volume):
     raise ValueError("Invalid volume path. Please use the format: /Volumes/catalog_name/schema_name/volume_name")
 
 # COMMAND ----------
+
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03d [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -61,6 +68,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # COMMAND ----------
+
 logger.info("Fetching External Locations...")
 
 w = WorkspaceClient()
@@ -92,9 +100,11 @@ ext_loc_df = (
 logger.info(f"{ext_loc_df.count()} External Locations fetched successfully.")
 
 # COMMAND ----------
-# ext_loc_df.display()
+
+ext_loc_df.display()
 
 # COMMAND ----------
+
 logger.info("Fetching HMS Governance data...")
 
 hms_governance_df = (
@@ -102,11 +112,12 @@ hms_governance_df = (
     .withColumn("s3_paths_regex", F.explode(F.col("s3_paths_regex")))
 )
 
-# hms_governance_df.display()
+hms_governance_df.display()
 
 logger.info(f"{hms_governance_df.count()} entries for HMS Governance data fetched successfully.")
 
 # COMMAND ----------
+
 logger.info("Joining External Locations with HMS Governance data...")
 
 joined_df = (
@@ -122,9 +133,11 @@ joined_df = (
 )
 
 # COMMAND ----------
-# joined_df.display()
+
+joined_df.display()
 
 # COMMAND ----------
+
 logger.info("Generating HCL...")
 
 ext_loc_datasources_df = (
@@ -158,6 +171,11 @@ tf_output_df = (
 )
 
 # COMMAND ----------
+
+tf_output_df.display()
+
+# COMMAND ----------
+
 (
     tf_output_df
     .coalesce(1)
@@ -167,5 +185,14 @@ tf_output_df = (
 )
 
 # COMMAND ----------
+
 finish_time = datetime.datetime.now()
 dbutils.notebook.exit(f"HCL converter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
+
+# COMMAND ----------
+
+dbutils.fs.ls("dbfs:/Volumes/users/wagner_silveira/tf/tf_exported_20240612_134850.tf/part-00000-tid-923262340002559518-917c562c-9063-4d43-b2fc-4453ec388c2c-711-1-c000.txt")
+
+# COMMAND ----------
+
+dbutils.fs.head("dbfs:/Volumes/users/wagner_silveira/tf/tf_exported_20240612_134850.tf/part-00000-tid-923262340002559518-917c562c-9063-4d43-b2fc-4453ec388c2c-711-1-c000.txt")

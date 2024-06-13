@@ -8,6 +8,7 @@
 # MAGIC
 
 # COMMAND ----------
+
 import re
 import logging
 import datetime
@@ -15,9 +16,11 @@ import datetime
 from pyspark.sql import functions as F, Column
 
 # COMMAND ----------
+
 start_time = datetime.datetime.now()
 
 # COMMAND ----------
+
 logging.basicConfig(
     format="%(asctime)s.%(msecs)03d [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -26,14 +29,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # COMMAND ----------
+
 dbutils.widgets.text("src_table", "wsilveira.wsilveira.tbdp_prod_grants_phase_1", "HMS privileges table")
+dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", "Destination Volume for the TF file")
 hms_privileges_tbl = dbutils.widgets.get("src_table")
+tf_file_dst_volume = dbutils.widgets.get("tf_file_dst_volume")
 
 pattern = re.compile(r"^[a-zA-Z0-9_-`]+\.[a-zA-Z0-9_-`]+\.[a-zA-Z0-9_-`]+$")
 if not pattern.match(hms_privileges_tbl):
     raise ValueError("Invalid source table name. Please use the format: catalog.database.table_name")
 
 # COMMAND ----------
+
 HMS_UC_PRIVILEGES_MAPPING = {
     "READ_METADATA": ["USE_CATALOG", "USE_SCHEMA", "BROWSE"],
     "SELECT": ["USE_CATALOG", "USE_SCHEMA","SELECT"],
@@ -61,15 +68,10 @@ HMS_UC_PRIVILEGES_MAPPING = {
                "READ_VOLUME",
                "REFRESH",
                "SELECT"],
-            #    "WRITE_VOLUME",
-            #    "CREATE_FUNCTION",
-            #    "CREATE_MATERIZALIZED_VIEW",
-            #    "CREATE_MODEL",
-            #    "CREATE_TABLE",
-            #    "CREATE_VOLUME"],
 }
 
 # COMMAND ----------
+
 df = spark.table(hms_privileges_tbl)
 
 when_cond = None
@@ -95,19 +97,107 @@ df = (
     .groupBy("principal", "hms_object", "object_type")
     .agg(F.array_distinct(F.flatten(F.collect_list("uc_privileges"))).alias("uc_privileges"), F.array_distinct(F.collect_list("action_type")).alias("hms_privileges"))
     .withColumn("hms_object_sanitized", F.lower(F.regexp_replace(F.col("hms_object"), "[^a-zA-Z0-9_]", "_")))
+    .withColumn("principal_sanitized", F.lower(F.regexp_replace(F.col("principal"), "[^a-zA-Z0-9_]", "_")))
 )
 
 # COMMAND ----------
+
 df.display()
 
 # COMMAND ----------
-# catalog_datasources_df = (
-#   df.filter(F.col("object_type") == F.lit("CATALOG"))
-#   .select("hms_object", "hms_object_sanitized")
-#   .distinct()
-#   .withColumn("output", F.concat(F.lit("data \"databricks_catalog\" \"cat_"),
-#                                  F.lower(F.col("hms_object_sanitized")),
-#                                  F.lit("\" {\n\tname = \""),
-#                                  F.col("hms_object"),
-#                                  F.lit("\"\n}")))
-#   .select("output"))
+
+from utils.consts import *
+
+databricks_catalogs_df = (
+   df.filter(F.col("object_type") == F.lit("CATALOG"))
+   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
+   .distinct()
+   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"catalog_"),
+                                  F.lower(F.col("hms_object_sanitized")),
+                                  F.lit("_"),
+                                  F.lower(F.col("principal_sanitized")),
+                                  F.lit("\" {\n\tcatalog = \""), 
+                                  F.lower(F.col("hms_object_sanitized")),                                 
+                                  F.lit("\"\n\n"),
+                                  F.lit("\tprincipal = \""),
+                                  F.col("principal"),
+                                  F.lit("\"\n"),
+                                  F.lit("\tprivileges = [\""),
+                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
+                                  F.lit("\"]"),
+                                  F.lit("\n}"),
+                                  F.lit("\n")
+                                  )
+               )
+   .select("output"))
+
+
+databricks_schemas_df = (
+   df.filter(F.col("object_type") == F.lit("SCHEMA"))
+   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
+   .distinct()
+   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"schema_"),
+                                  F.lower(F.col("hms_object_sanitized")),
+                                  F.lit("_"),
+                                  F.lower(F.col("principal_sanitized")),
+                                  F.lit("\" {\n\tschema = \""), 
+                                  F.col("hms_object"),                               
+                                  F.lit("\"\n\n"),
+                                  F.lit("\tprincipal = \""),
+                                  F.col("principal"),
+                                  F.lit("\"\n"),
+                                  F.lit("\tprivileges = [\""),
+                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
+                                  F.lit("\"]"),
+                                  F.lit("\n}"),
+                                  F.lit("\n")
+                                  )
+               )
+   .select("output"))
+
+databricks_tables_df = (
+   df.filter(F.col("object_type") == F.lit("TABLE"))
+   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
+   .distinct()
+   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"table_"),
+                                  F.lower(F.col("hms_object_sanitized")),
+                                  F.lit("_"),
+                                  F.lower(F.col("principal_sanitized")),
+                                  F.lit("\" {\n\ttable = \""), 
+                                  F.col("hms_object"),                                
+                                  F.lit("\"\n\n"),
+                                  F.lit("\tprincipal = \""),
+                                  F.col("principal"),
+                                  F.lit("\"\n"),
+                                  F.lit("\tprivileges = [\""),
+                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
+                                  F.lit("\"]"),
+                                  F.lit("\n}"),
+                                  F.lit("\n")
+                                  )
+               )
+   .select("output"))
+
+tf_output_df = (
+    spark.createDataFrame([(TF_TEMPLATE_INIT, )], "output string")
+    .union(databricks_catalogs_df)
+    .union(databricks_schemas_df)
+    .union(databricks_tables_df)
+)
+
+tf_output_df.display()
+
+# COMMAND ----------
+
+(
+    tf_output_df
+    .coalesce(1)
+    .write
+    .mode("overwrite")
+    .text(f"{tf_file_dst_volume}/tf_exported_grants_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
+)
+
+# COMMAND ----------
+
+finish_time = datetime.datetime.now()
+dbutils.notebook.exit(f"HCL converter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
