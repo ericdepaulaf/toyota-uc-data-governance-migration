@@ -194,10 +194,20 @@ tf_output_df.display()
     .coalesce(1)
     .write
     .mode("overwrite")
-    .text(f"{tf_file_dst_volume}/tf_exported_grants_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
+    .text(f"{tf_file_dst_volume}/tf_exported_acl_grants_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
 )
 
 # COMMAND ----------
 
 finish_time = datetime.datetime.now()
 dbutils.notebook.exit(f"HCL converter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC GRANT READ_METADATA ON SCHEMA users.wagner_silveira to `eric.ferreira@databricks.com` 
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select * from users.wagner_silveira.tbdp_prod_grants_phase_1

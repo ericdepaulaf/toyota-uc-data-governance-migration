@@ -147,7 +147,9 @@ ext_loc_datasources_df = (
                                  F.lower(F.col("sanitized_ext_loc_name")),
                                  F.lit("\" {\n\tname = \""),
                                  F.col("ext_loc_name"),
-                                 F.lit("\"\n}")))
+                                 F.lit("\"\n}"),
+                                 F.lit("\n")),
+             )
   .select("output"))
 
 grant_ext_loc_resources_df = (
@@ -157,11 +159,12 @@ grant_ext_loc_resources_df = (
                                      F.col("sanitized_principal_display_name"),
                                      F.lit("_"),
                                      F.col("sanitized_ext_loc_name"),
-                                     F.lit("\" {\n\texternal_location = data.databricks_external_location.ext_loc_"),
+                                     F.lit("\" {\n\texternal_location = databricks_external_location.ext_loc_"),
                                      F.col("sanitized_ext_loc_name"),
                                      F.lit(".id\n\n\tprincipal = \""),
                                      F.col("principal_display_name"),
-                                     F.lit("\"\n\tprivileges = [\"ALL_PRIVILEGES\"]\n}")))
+                                     F.lit("\"\n\tprivileges = [\"ALL_PRIVILEGES\"]\n}"),
+                                     F.lit("\n")))
     .select("output"))
 
 tf_output_df = (
@@ -181,18 +184,10 @@ tf_output_df.display()
     .coalesce(1)
     .write
     .mode("overwrite")
-    .text(f"{tf_file_dst_volume}/tf_exported_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
+    .text(f"{tf_file_dst_volume}/tf_exported_extloc_grants{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
 )
 
 # COMMAND ----------
 
 finish_time = datetime.datetime.now()
 dbutils.notebook.exit(f"HCL converter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
-
-# COMMAND ----------
-
-dbutils.fs.ls("dbfs:/Volumes/users/wagner_silveira/tf/tf_exported_20240612_134850.tf/part-00000-tid-923262340002559518-917c562c-9063-4d43-b2fc-4453ec388c2c-711-1-c000.txt")
-
-# COMMAND ----------
-
-dbutils.fs.head("dbfs:/Volumes/users/wagner_silveira/tf/tf_exported_20240612_134850.tf/part-00000-tid-923262340002559518-917c562c-9063-4d43-b2fc-4453ec388c2c-711-1-c000.txt")
