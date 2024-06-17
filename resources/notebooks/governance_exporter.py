@@ -111,8 +111,7 @@ hms_governance_df.write.mode("overwrite").option("mergeSchema", True).saveAsTabl
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC select * from users.wagner_silveira.hms_governance_update
+display(spark.sql(f"select * from {dest_table} "))
 
 # COMMAND ----------
 
