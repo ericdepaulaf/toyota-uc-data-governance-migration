@@ -124,7 +124,7 @@ joined_df = (
     hms_governance_df.crossJoin(ext_loc_df)
     .withColumn("access_granted", F.regexp_like(F.col("url"), F.col("s3_paths_regex")))
     .filter(F.col("access_granted") == F.lit(True))
-    .select("instance_profile_arn", "role_name", "principal_display_name", "principal_id", "ext_loc_name", "credential_id", "credential_name", "url")
+    .select("instance_profile_arn", "role_name", "principal_display_name", "principal_id", "ext_loc_name", "credential_id", "credential_name", "url", "email_value", "principalType", "applicationId")
     .withColumns({
         "sanitized_ext_loc_name": F.lower(F.regexp_replace(F.col("ext_loc_name"), "[^a-zA-Z0-9_]", "_")),
         "sanitized_principal_display_name": F.lower(F.regexp_replace(F.col("principal_display_name"), "[^a-zA-Z0-9_]", "_")),
@@ -134,7 +134,7 @@ joined_df = (
 
 # COMMAND ----------
 
-joined_df.display()
+joined_df.filter("principal_display_name = 'dropbox_test'").display()
 
 # COMMAND ----------
 
@@ -153,16 +153,18 @@ ext_loc_datasources_df = (
   .select("output"))
 
 grant_ext_loc_resources_df = (
-    joined_df.select("sanitized_principal_display_name", "sanitized_ext_loc_name", "principal_display_name")
+    joined_df.select("sanitized_principal_display_name", "sanitized_ext_loc_name", "principal_display_name", "email_value", "applicationId", "principalType")
     .distinct()
     .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"principal_"),
                                      F.col("sanitized_principal_display_name"),
                                      F.lit("_"),
                                      F.col("sanitized_ext_loc_name"),
-                                     F.lit("\" {\n\texternal_location = databricks_external_location.ext_loc_"),
+                                     F.lit("\" {\n\texternal_location = data.databricks_external_location.ext_loc_"),
                                      F.col("sanitized_ext_loc_name"),
                                      F.lit(".id\n\n\tprincipal = \""),
-                                     F.col("principal_display_name"),
+                                     F.when((F.col("email_value").isNotNull()) & (F.col("principalType") == "USER"), F.col("email_value"))
+                                      .when((F.col("applicationId").isNotNull()) & (F.col("principalType") == "SERVICE_PRINCIPAL"), F.col("applicationId"))
+                                      .otherwise(F.col("principal_display_name")),
                                      F.lit("\"\n\tprivileges = [\"ALL_PRIVILEGES\"]\n}"),
                                      F.lit("\n")))
     .select("output"))

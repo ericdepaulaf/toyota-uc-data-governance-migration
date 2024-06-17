@@ -42,32 +42,13 @@ if not pattern.match(hms_privileges_tbl):
 # COMMAND ----------
 
 HMS_UC_PRIVILEGES_MAPPING = {
-    "READ_METADATA": ["USE_CATALOG", "USE_SCHEMA", "BROWSE"],
-    "SELECT": ["USE_CATALOG", "USE_SCHEMA","SELECT"],
-    "CREATE": ["USE_CATALOG", 
-               "USE_SCHEMA",
-               "APPLY_TAG",
-               "BROWSE",
-               "EXECUTE",
-               "MODIFY",
-               "READ_VOLUME",
-               "REFRESH",
-               "SELECT",
-               "WRITE_VOLUME",
-               "CREATE_FUNCTION",
-               "CREATE_MATERIZALIZED_VIEW",
-               "CREATE_MODEL",
-               "CREATE_TABLE",
-               "CREATE_VOLUME"],
-    "MODIFY": ["USE_CATALOG",
-               "USE_SCHEMA",
-               "APPLY_TAG",
-               "BROWSE",
-               "EXECUTE",
-               "MODIFY",
-               "READ_VOLUME",
-               "REFRESH",
-               "SELECT"],
+    "ALL PRIVILEGES": ["ALL PRIVILEGES"],
+    "READ_METADATA": ["APPLY TAG", "BROWSE"],
+    "USAGE" : ["USE CATALOG", "USE SCHEMA"],
+    "SELECT": ["SELECT"],
+    "CREATE": ["CREATE TABLE", "CREATE SCHEMA"],
+    "MODIFY": ["MODIFY"],
+    "CREATE_NAMED_FUNCTION": ["CREATE FUNCTION"]
 }
 
 # COMMAND ----------
@@ -87,17 +68,21 @@ logger.info(f"Mapping conditions {when_cond}")
 
 df = (
     df.withColumn("uc_privileges", when_cond)
-    .withColumns({
-        "object_type": F.when(F.col("table").isNotNull() | F.col("view").isNotNull(), F.lit("TABLE"))
-                        .when(F.col("database").isNotNull(), F.lit("SCHEMA"))
-                        .when(F.col("catalog").isNotNull(), F.lit("CATALOG"))
-                        .otherwise(F.lit("UNKNOWN")),
-        "hms_object": F.concat_ws(".", F.col("catalog"), F.col("database"), F.col("table"))
+      .withColumns({
+          "object_type": F.when(F.col("table").isNotNull() | F.col("view").isNotNull(), F.lit("TABLE"))
+                          .when(F.col("database").isNotNull(), F.lit("SCHEMA"))
+                          .when(F.col("catalog").isNotNull(), F.lit("CATALOG"))
+                          .otherwise(F.lit("UNKNOWN")),
+          "hms_object": F.concat_ws(".", F.col("catalog"), F.col("database"), F.col("table"))
         })
-    .groupBy("principal", "hms_object", "object_type")
-    .agg(F.array_distinct(F.flatten(F.collect_list("uc_privileges"))).alias("uc_privileges"), F.array_distinct(F.collect_list("action_type")).alias("hms_privileges"))
-    .withColumn("hms_object_sanitized", F.lower(F.regexp_replace(F.col("hms_object"), "[^a-zA-Z0-9_]", "_")))
-    .withColumn("principal_sanitized", F.lower(F.regexp_replace(F.col("principal"), "[^a-zA-Z0-9_]", "_")))
+      .withColumn("uc_privileges", F.when(F.col("object_type") == "TABLE", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE CATALOG", "CREATE SCHEMA", "CREATE TABLE"])))
+                                    .when(F.col("object_type") == "SCHEMA", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE SCHEMA", "CREATE CATALOG", "USE CATALOG"])))
+                                    .when(F.col("object_type") == "CATALOG", F.array_except(F.col("uc_privileges"), F.lit(["CREATE TABLE", "CREATE CATALOG", "USE SCHEMA"])))
+                                    .otherwise(F.col("uc_privileges")))
+      .groupBy("principal", "hms_object", "object_type")
+      .agg(F.array_distinct(F.flatten(F.collect_list("uc_privileges"))).alias("uc_privileges"), F.array_distinct(F.collect_list("action_type")).alias("hms_privileges"))
+      .withColumn("hms_object_sanitized", F.lower(F.regexp_replace(F.col("hms_object"), "[^a-zA-Z0-9_]", "_")))
+      .withColumn("principal_sanitized", F.lower(F.regexp_replace(F.col("principal"), "[^a-zA-Z0-9_]", "_")))
 )
 
 # COMMAND ----------
@@ -201,13 +186,3 @@ tf_output_df.display()
 
 finish_time = datetime.datetime.now()
 dbutils.notebook.exit(f"HCL converter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC GRANT READ_METADATA ON SCHEMA users.wagner_silveira to `eric.ferreira@databricks.com` 
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC select * from users.wagner_silveira.tbdp_prod_grants_phase_1

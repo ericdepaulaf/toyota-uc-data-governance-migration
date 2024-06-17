@@ -85,6 +85,7 @@ permissions_df = p.get_principal_permissions(principal, naming_convention_filter
 
 # COMMAND ----------
 
+permissions_df = permissions_df.withColumn("email_value", F.col("emails").getItem(0).getItem("value"))
 display(permissions_df)
 
 # COMMAND ----------
@@ -110,10 +111,10 @@ hms_governance_df.write.mode("overwrite").option("mergeSchema", True).saveAsTabl
 
 # COMMAND ----------
 
-finish_time = datetime.datetime.now()
-dbutils.notebook.exit(f"HMS governance exporter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")
+# MAGIC %sql
+# MAGIC select * from users.wagner_silveira.hms_governance_update
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC select count(*) from users.wagner_silveira.hms_governance_update
+finish_time = datetime.datetime.now()
+dbutils.notebook.exit(f"HMS governance exporter successfully completed. Date: {finish_time.date()}, Execution time: {finish_time-start_time}")

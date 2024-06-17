@@ -1,7 +1,7 @@
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.iam import GroupsAPI, UsersAPI, ServicePrincipalsAPI
 from typing import List, Union
-from pyspark.sql import types as T, SparkSession, DataFrame
+from pyspark.sql import types as T, SparkSession, DataFrame, functions as F
 import logging
 import json
 from enum import Enum
@@ -25,7 +25,7 @@ class PrincipalPermissions:
 
         self._spark = SparkSession.builder.getOrCreate()
 
-        self._ATTRIBUTES = "displayName,id,roles"
+        self._ATTRIBUTES = "displayName,applicationId,id,roles,emails"
         self._PRINCIPAL_READ_PER_CALL = 500
 
     def _principal_paginated_read(self, client: Union[GroupsAPI]) -> List[dict]:
@@ -77,13 +77,14 @@ class PrincipalPermissions:
 
         principal_details = []
         principal_detail_keys = self._ATTRIBUTES.split(",")
+
         for principal in principals:
             principal_dict = principal.as_dict()
             principal_details.append(dict((key,principal_dict.get(key)) for key in principal_detail_keys))
 
         return principal_details
     
-    def _get_ws_principals(self, client: Union[GroupsAPI, UsersAPI, ServicePrincipalsAPI], naming_convention_filter: str = "") -> DataFrame:
+    def _get_ws_principals(self, client: Union[GroupsAPI, UsersAPI, ServicePrincipalsAPI], principal_type: str, naming_convention_filter: str = "") -> DataFrame:
         """Get the ws groups from the source table.
 
         Returns:
@@ -94,6 +95,13 @@ class PrincipalPermissions:
 
         schema = T.StructType([
             T.StructField("displayName", T.StringType(), True, {"comment": "User display name"}),
+            T.StructField("emails", T.ArrayType(
+                T.StructType([
+                    T.StructField("$ref", T.StringType(), True, {"comment": "User Ref"}),
+                    T.StructField("value", T.StringType(), True, {"comment": "User ID"}),
+                    T.StructField("display", T.StringType(), True, {"comment": "User Display Name"}),
+                    T.StructField("primary", T.StringType(), True, {"comment": ""}),
+                    T.StructField("type", T.StringType(), True, {"comment": ""})])), True, {"comment": "User emails"}),
             T.StructField("id", T.StringType(), True, {"comment": "User ID"}),
             T.StructField("roles", T.ArrayType(
                 T.StructType([
@@ -101,7 +109,8 @@ class PrincipalPermissions:
                     T.StructField("value", T.StringType(), True, {"comment": "User ID"}),
                     T.StructField("display", T.StringType(), True, {"comment": "User Display Name"}),
                     T.StructField("primary", T.StringType(), True, {"comment": ""}),
-                    T.StructField("type", T.StringType(), True, {"comment": ""})])), True, {"comment": "Roles"})
+                    T.StructField("type", T.StringType(), True, {"comment": ""})])), True, {"comment": "Roles"}),
+            T.StructField("applicationId", T.StringType(), True, {"comment": "Application ID"}),
         ])
         
         try:
@@ -110,7 +119,8 @@ class PrincipalPermissions:
                 self._spark.createDataFrame(ws_principals, schema=schema)
                 .filter("roles.value IS NOT NULL")
                 .dropDuplicates(["displayName", "id"])
-                .selectExpr("displayName", "id", "roles.value as instance_profile_arn")
+                .selectExpr("displayName", "emails", "applicationId", "id", "roles.value as instance_profile_arn")
+                .withColumn("principalType", F.lit(principal_type))
             )
 
             if naming_convention_filter != "":
@@ -132,16 +142,16 @@ class PrincipalPermissions:
         match principal_type:
             case PrincipalType.ALL:
                 ret = (
-                    self._get_ws_principals(client.groups, naming_convention_filter)
-                    .union(self._get_ws_principals(client.users, naming_convention_filter))
-                    .union(self._get_ws_principals(client.service_principals, naming_convention_filter))
+                    self._get_ws_principals(client.groups, "GROUP", naming_convention_filter)
+                    .union(self._get_ws_principals(client.users, "USER", naming_convention_filter))
+                    .union(self._get_ws_principals(client.service_principals, "SERVICE_PRINCIPAL", naming_convention_filter))
                 )
             case PrincipalType.GROUP:
-                ret = self._get_ws_principals(client.groups, naming_convention_filter)
+                ret = self._get_ws_principals(client.groups, "GROUP", naming_convention_filter)
             case PrincipalType.USER:
-                ret = self._get_ws_principals(client.users, naming_convention_filter)
+                ret = self._get_ws_principals(client.users, "USER", naming_convention_filter)
             case PrincipalType.SERVICE_PRINCIPAL:
-                ret = self._get_ws_principals(client.service_principals, naming_convention_filter)
+                ret = self._get_ws_principals(client.service_principals, "SERVICE_PRINCIPAL", naming_convention_filter)
             case _:
                 raise ValueError("Invalid principal type. Please use one of: group, user, service_principal")
         
