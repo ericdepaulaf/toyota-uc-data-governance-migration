@@ -42,14 +42,22 @@ if not pattern.match(hms_privileges_tbl):
 # COMMAND ----------
 
 HMS_UC_PRIVILEGES_MAPPING = {
-    "ALL PRIVILEGES": ["ALL PRIVILEGES"],
-    "READ_METADATA": ["APPLY TAG", "BROWSE"],
-    "USAGE" : ["USE CATALOG", "USE SCHEMA"],
+    "ALL PRIVILEGES": ["ALL_PRIVILEGES"],
+    "READ_METADATA": ["APPLY_TAG", "BROWSE"],
+    "USAGE" : ["USE_CATALOG", "USE_SCHEMA"],
     "SELECT": ["SELECT"],
-    "CREATE": ["CREATE TABLE", "CREATE SCHEMA"],
+    "CREATE": ["CREATE_TABLE", "CREATE_SCHEMA"],
     "MODIFY": ["MODIFY"],
-    "CREATE_NAMED_FUNCTION": ["CREATE FUNCTION"]
+    "CREATE_NAMED_FUNCTION": ["CREATE_FUNCTION"]
 }
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
@@ -75,14 +83,19 @@ df = (
                           .otherwise(F.lit("UNKNOWN")),
           "hms_object": F.concat_ws(".", F.col("catalog"), F.col("database"), F.col("table"))
         })
-      .withColumn("uc_privileges", F.when(F.col("object_type") == "TABLE", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE CATALOG", "CREATE SCHEMA", "CREATE TABLE"])))
-                                    .when(F.col("object_type") == "SCHEMA", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE SCHEMA", "CREATE CATALOG", "USE CATALOG"])))
-                                    .when(F.col("object_type") == "CATALOG", F.array_except(F.col("uc_privileges"), F.lit(["CREATE TABLE", "CREATE CATALOG", "USE SCHEMA"])))
+      .withColumn("uc_privileges", F.when(F.col("object_type") == "TABLE", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE_CATALOG", "CREATE_SCHEMA", "CREATE_TABLE"])))
+                                    .when(F.col("object_type") == "SCHEMA", F.array_except(F.col("uc_privileges"), F.lit(["BROWSE", "CREATE_SCHEMA", "CREATE_CATALOG", "USE_CATALOG"])))
+                                    .when(F.col("object_type") == "CATALOG", F.array_except(F.col("uc_privileges"), F.lit(["CREATE_TABLE", "CREATE_CATALOG", "USE_SCHEMA"])))
                                     .otherwise(F.col("uc_privileges")))
       .groupBy("principal", "hms_object", "object_type")
-      .agg(F.array_distinct(F.flatten(F.collect_list("uc_privileges"))).alias("uc_privileges"), F.array_distinct(F.collect_list("action_type")).alias("hms_privileges"))
+      .agg(F.sort_array(F.array_distinct(F.flatten(F.collect_list("uc_privileges"))), asc=False).alias("uc_privileges"), F.array_distinct(F.collect_list("action_type")).alias("hms_privileges"))
+      .groupBy("hms_object")
+      .agg(F.collect_list(F.concat(F.lit("[\""), F.regexp_replace(F.concat_ws(",", "uc_privileges"), ",", "\",\""), F.lit("\"]"))).alias("uc_privileges"),
+           F.collect_list("hms_privileges").alias("hms_privileges"), 
+           F.collect_list("principal").alias("principal"),
+           F.mode("object_type").alias("object_type"))
       .withColumn("hms_object_sanitized", F.lower(F.regexp_replace(F.col("hms_object"), "[^a-zA-Z0-9_]", "_")))
-      .withColumn("principal_sanitized", F.lower(F.regexp_replace(F.col("principal"), "[^a-zA-Z0-9_]", "_")))
+      .withColumn("grants",F.concat_ws("\n\n", F.zip_with("principal", "uc_privileges", lambda x, y: F.concat(F.lit("\tgrant {\n\t\tprincipal  = \""), x, F.lit("\""), F.lit("\n\t\tprivileges  = "),y, F.lit("\n\t}")))))
 )
 
 # COMMAND ----------
@@ -95,21 +108,14 @@ from utils.consts import *
 
 databricks_catalogs_df = (
    df.filter(F.col("object_type") == F.lit("CATALOG"))
-   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
+   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "grants")
    .distinct()
-   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"catalog_"),
+   .withColumn("output", F.concat(F.lit("resource \"databricks_grants\" \"catalog_"),
                                   F.lower(F.col("hms_object_sanitized")),
-                                  F.lit("_"),
-                                  F.lower(F.col("principal_sanitized")),
                                   F.lit("\" {\n\tcatalog = \""), 
-                                  F.lower(F.col("hms_object_sanitized")),                                 
+                                  F.col("hms_object"),                                
                                   F.lit("\"\n\n"),
-                                  F.lit("\tprincipal = \""),
-                                  F.col("principal"),
-                                  F.lit("\"\n"),
-                                  F.lit("\tprivileges = [\""),
-                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
-                                  F.lit("\"]"),
+                                  F.col("grants"),
                                   F.lit("\n}"),
                                   F.lit("\n")
                                   )
@@ -119,21 +125,14 @@ databricks_catalogs_df = (
 
 databricks_schemas_df = (
    df.filter(F.col("object_type") == F.lit("SCHEMA"))
-   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
+   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "grants")
    .distinct()
-   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"schema_"),
+   .withColumn("output", F.concat(F.lit("resource \"databricks_grants\" \"schema_"),
                                   F.lower(F.col("hms_object_sanitized")),
-                                  F.lit("_"),
-                                  F.lower(F.col("principal_sanitized")),
                                   F.lit("\" {\n\tschema = \""), 
-                                  F.col("hms_object"),                               
+                                  F.col("hms_object"),
                                   F.lit("\"\n\n"),
-                                  F.lit("\tprincipal = \""),
-                                  F.col("principal"),
-                                  F.lit("\"\n"),
-                                  F.lit("\tprivileges = [\""),
-                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
-                                  F.lit("\"]"),
+                                  F.col("grants"),
                                   F.lit("\n}"),
                                   F.lit("\n")
                                   )
@@ -142,26 +141,19 @@ databricks_schemas_df = (
 
 databricks_tables_df = (
    df.filter(F.col("object_type") == F.lit("TABLE"))
-   .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "principal_sanitized")
-   .distinct()
-   .withColumn("output", F.concat(F.lit("resource \"databricks_grant\" \"table_"),
+     .select("hms_object", "hms_object_sanitized", "principal", "uc_privileges", "grants")
+     .distinct()
+     .withColumn("output", F.concat(F.lit("resource \"databricks_grants\" \"table_"),
                                   F.lower(F.col("hms_object_sanitized")),
-                                  F.lit("_"),
-                                  F.lower(F.col("principal_sanitized")),
                                   F.lit("\" {\n\ttable = \""), 
-                                  F.col("hms_object"),                                
+                                  F.col("hms_object"),                                 
                                   F.lit("\"\n\n"),
-                                  F.lit("\tprincipal = \""),
-                                  F.col("principal"),
-                                  F.lit("\"\n"),
-                                  F.lit("\tprivileges = [\""),
-                                  F.regexp_replace(F.concat_ws(",", "uc_privileges"), ',', '\",\"'),
-                                  F.lit("\"]"),
+                                  F.col("grants"),
                                   F.lit("\n}"),
                                   F.lit("\n")
                                   )
                )
-   .select("output"))
+     .select("output"))
 
 tf_output_df = (
     spark.createDataFrame([(TF_TEMPLATE_INIT, )], "output string")
