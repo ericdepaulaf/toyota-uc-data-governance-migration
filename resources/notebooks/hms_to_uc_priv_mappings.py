@@ -53,14 +53,6 @@ HMS_UC_PRIVILEGES_MAPPING = {
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
 df = spark.table(hms_privileges_tbl)
 
 when_cond = None
