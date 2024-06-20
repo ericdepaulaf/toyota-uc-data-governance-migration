@@ -129,12 +129,12 @@ class CrawlS3Paths:
         iam_roles_and_s3_paths = []
 
         # Create an IAM client
-        iam_client = boto3.client('iam',
-                                  aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
-                                  aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
-                                  aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        #iam_client = boto3.client('iam',
+        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
         
-        #iam_client = boto3.client('iam')
+        iam_client = boto3.client('iam')
 
         for profile_arn in instance_profile_arn:
 
@@ -174,3 +174,80 @@ class CrawlS3Paths:
         )
 
         return self._spark.createDataFrame(iam_roles_and_s3_paths, schema)
+    
+class CrawlS3Buckets:
+
+    def __init__(self, log_level=logging.DEBUG):
+        """
+        Initialize the ClusterPermissions class.
+        """
+
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(level=logging.DEBUG)  # Prevents changing other log levels
+
+        self._spark = SparkSession.builder.getOrCreate()
+        self._dbutils = DBUtils(self._spark)
+
+    def get_s3_buckets(self, aws_secrets_scope: str) -> List:
+        """
+        Get the S3 buckets.
+        """
+
+        # Create an IAM client
+        #s3_client = boto3.client('s3',
+        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        
+        s3_client = boto3.client('s3')
+
+        # List all buckets
+        response = s3_client.list_buckets()
+
+        # Print bucket names
+        buckets = [bucket['Name'] for bucket in response['Buckets']]
+
+        # Crie um DataFrame a partir da lista
+        schema = T.StructType([T.StructField("bucket_name", T.StringType(), True)])
+        return self._spark.createDataFrame([(b,) for b in buckets], schema)
+    
+    def get_sub_folders_s3_buckets(self, aws_secrets_scope: str, s3_buckets_list: list) -> List:
+        """
+        Get the sub-folders of S3 buckets.
+        """
+
+        # Create an IAM client
+        #s3_client = boto3.client('s3',
+        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        
+        s3_client = boto3.client('s3')
+        volumes_list = []
+        for bucket_name in s3_buckets_list:
+            volumes_dict = {}
+            folders = []
+            paginator = s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=bucket_name, Delimiter='/', Prefix='')
+            try:
+                for page in pages:
+                    common_prefixes = page.get('CommonPrefixes', [])
+                    for prefix in common_prefixes:
+                        folder_path = bucket_name + "/" + prefix.get('Prefix')
+                        folders.append(folder_path)
+            except:
+                print("Error to access s3 bucket : " + bucket_name)
+
+            volumes_dict = {'s3_bucket_name': bucket_name, 'folders': folders}
+            volumes_list.append(volumes_dict)
+
+        # Create a list of rows from the list of dictionaries
+        rows = [tuple(dict_item.values()) for dict_item in volumes_list]
+
+        # Define the schema for the DataFrame
+        schema = T.StructType([
+            T.StructField("s3_bucket_name", T.StringType(), True),
+            T.StructField("folders", T.ArrayType(T.StringType()), True)])
+
+        # Create the DataFrame
+        return self._spark.createDataFrame(rows, schema)
