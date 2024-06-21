@@ -129,10 +129,10 @@ class CrawlS3Paths:
         iam_roles_and_s3_paths = []
 
         # Create an IAM client
-        #iam_client = boto3.client('iam',
-        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
-        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
-        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        iam_client = boto3.client('iam',
+                                  aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+                                  aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+                                  aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
         
         iam_client = boto3.client('iam')
 
@@ -233,8 +233,8 @@ class CrawlS3Buckets:
                 for page in pages:
                     common_prefixes = page.get('CommonPrefixes', [])
                     for prefix in common_prefixes:
-                        folder_path = bucket_name + "/" + prefix.get('Prefix')
-                        folders.append(folder_path)
+                        folder = prefix.get('Prefix')
+                        folders.append(folder)
             except:
                 print("Error to access s3 bucket : " + bucket_name)
 

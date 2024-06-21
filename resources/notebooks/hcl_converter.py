@@ -271,13 +271,13 @@ tf_output_df.display()
 
 # COMMAND ----------
 
-#(
-#    tf_output_df
-#    .coalesce(1)
-#    .write
-#    .mode("overwrite")
-#    .text(f"{tf_file_dst_volume}/tf_exported_extloc_grants{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
-#)
+(
+    tf_output_df
+    .coalesce(1)
+    .write
+    .mode("overwrite")
+    .text(f"{tf_file_dst_volume}/tf_exported_extloc_grants{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.tf")
+)
 
 # COMMAND ----------
 

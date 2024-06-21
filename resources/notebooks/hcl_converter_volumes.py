@@ -45,14 +45,42 @@ start_time = datetime.datetime.now()
 
 dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", "Destination Volume for the TF file")
 dbutils.widgets.text("aws_secrets_scope", "hms_exporter_aws_secrets", "AWS Secret Scope")
+dbutils.widgets.text("default_catalog_name", "users", "Default Catalog Name")
+dbutils.widgets.text("default_schema_name", "wagner_silveira", "Default Schema Name")
 
 tf_file_dst_volume = dbutils.widgets.get("tf_file_dst_volume")
 aws_secrets_scope = dbutils.widgets.get("aws_secrets_scope")
+default_catalog_name = dbutils.widgets.get("default_catalog_name")
+default_schema_name = dbutils.widgets.get("default_schema_name")
 
 tf_file_dst_volume = tf_file_dst_volume.rstrip("/")
 pattern = re.compile(r"^/Volumes/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$")
 if not pattern.match(tf_file_dst_volume):
     raise ValueError("Invalid volume path. Please use the format: /Volumes/catalog_name/schema_name/volume_name")
+
+# COMMAND ----------
+
+schema = T.StructType([T.StructField("s3_bucket_url", T.StringType(), True),
+                     T.StructField("catalog_name", T.StringType(), True),
+                     T.StructField("schema_name", T.StringType(), True),
+                    ])
+
+                    
+
+data = [
+        ("s3://databricks-dkushari",
+        "catalog1", 
+        "schema1"),
+        ("s3://one-env-uc-external-location",
+        "catalog2", 
+        "schema2"),
+        ("s3://oetrta",
+        "catalog3", 
+        "schema3"),
+    ]
+
+df_check_volumes = spark.createDataFrame(data, schema)
+display(df_check_volumes)
 
 # COMMAND ----------
 
@@ -92,6 +120,7 @@ ext_loc_df = (
     spark.createDataFrame(ext_loc, schema)
     .withColumnRenamed("name", "ext_loc_name")
     .withColumn("created", F.lit(True))
+    .withColumn("s3_bucket_url", F.regexp_extract(F.col("url"), r'(s3a?://[^/]+)/?', 1))
     .withColumn("s3_bucket_name", F.regexp_extract(F.col("url"), r"^s3://(.*?)/", 1))
 )
 
@@ -118,9 +147,10 @@ joined_df = (ext_loc_df.join(volumes_df, ["s3_bucket_name"], "inner")
                        .withColumn("volume", F.explode("folders"))
                        .withColumn("sanitized_volume", F.lower(F.regexp_replace(F.col("volume"), "[^a-zA-Z0-9_]", "_")))
                        .withColumn("sanitized_volume", F.col("sanitized_volume").substr(F.lit(0), F.length(F.col("sanitized_volume")) - 1))
-                       .withColumn("catalog_name", F.lit("users")) #need to be changed
-                       .withColumn("schema_name", F.lit("wagner_silveira")) #need to be changed
-                       .select("sanitized_ext_loc_name", "sanitized_volume", "ext_loc_name", "volume", "catalog_name", "schema_name", "url")
+                       .join(df_check_volumes, ["s3_bucket_url"], "left")
+                       .withColumn("catalog_name", F.when(F.col("catalog_name").isNull(), F.lit(default_catalog_name)).otherwise(F.col("catalog_name")))
+                       .withColumn("schema_name", F.when(F.col("schema_name").isNull(), F.lit(default_schema_name)).otherwise(F.col("schema_name")))
+                       .select("sanitized_ext_loc_name", "sanitized_volume", "ext_loc_name", "volume", "catalog_name", "schema_name", "s3_bucket_url")
                        .filter("volume is not null")
                        .dropDuplicates()
             )
@@ -131,7 +161,7 @@ display(joined_df)
 logger.info("Generating HCL...")
 
 volumes_resources_df = (
-    joined_df.select("sanitized_ext_loc_name", "sanitized_volume", "volume", "catalog_name", "schema_name", "url")
+    joined_df.select("sanitized_ext_loc_name", "sanitized_volume", "volume", "catalog_name", "s3_bucket_url", "schema_name")
     .distinct()
     .withColumn("output", F.concat(F.lit("resource \"databricks_volume\" \"volume_"),
                                      F.col("sanitized_ext_loc_name"),
@@ -147,7 +177,9 @@ volumes_resources_df = (
                                      F.col("schema_name"),
                                      F.lit("\"\n"),
                                      F.lit("\tvolume_type = \"EXTERNAL\"\n"),
-                                     F.lit("\tstorage_location = \"s3://"),
+                                     F.lit("\tstorage_location = \""),
+                                     F.col("s3_bucket_url"),
+                                     F.lit("/"),
                                      F.col("volume"),
                                      F.lit("\"\n"),
                                      F.lit("\tcomment = \"Volume created by terraform\""),
