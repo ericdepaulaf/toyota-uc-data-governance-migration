@@ -180,3 +180,29 @@ pages.
 # COMMAND ----------
 
 dbutils.fs.ls("s3://oetrta/maggie/")
+
+# COMMAND ----------
+
+import re
+
+s3_folders = [
+    "arn:aws:s3:::db-*",
+    "arn:aws:s3:::databricks-*",
+    "arn:aws:s3:::oetrta",
+    "arn:aws:s3:::db-*/*",
+    "arn:aws:s3:::db-*/*karla",
+    "arn:aws:s3:::databricks-*/*",
+    "arn:aws:s3:::oetrta/*",
+    "arn:aws:s3:::oetrta/eric",
+    "arn:aws:s3:::databricks-*/*julia*"
+]
+
+# Regex pattern to match root buckets and immediate subfolders
+pattern = re.compile(r'^arn:aws:s3:::([^/]+)(/\*)?$')
+
+selected_folders = [folder for folder in s3_folders if pattern.match(folder)]
+
+# Now you can iterate over the selected folders
+for folder in selected_folders:
+    print(folder)
+    # Perform your desired operations with each folder

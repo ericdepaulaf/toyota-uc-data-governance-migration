@@ -193,7 +193,7 @@ joined_df = (
 
 # COMMAND ----------
 
-joined_df.filter("created = false").display()
+joined_df.display()
 
 # COMMAND ----------
 

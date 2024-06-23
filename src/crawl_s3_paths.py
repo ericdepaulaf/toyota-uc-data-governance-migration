@@ -71,6 +71,7 @@ class CrawlS3Paths:
         """
         s3_paths = []
         s3_paths_regex = []
+        pattern = re.compile(r'^arn:aws:s3:::([^/]+)(/\*)?$')
 
         self._logger.debug(f"Getting paths for IAM role: {role_name}")
 
@@ -113,8 +114,10 @@ class CrawlS3Paths:
                             resources = [resources]  # Ensure resources is a list
                         for resource in resources:
                             if resource.startswith('arn:aws:s3:::'):
-                                s3_paths.append(resource.replace('arn:aws:s3:::', 's3://'))
-                                s3_paths_regex.append(resource.replace('arn:aws:s3:::', 's3://').replace('*', '.*'))
+                                if pattern.match(resource):
+                                    print("resource: " + resource)
+                                    s3_paths.append(resource.replace('arn:aws:s3:::', 's3://'))
+                                    s3_paths_regex.append(resource.replace('arn:aws:s3:::', 's3://').replace('*', '.*'))
 
         return s3_paths, s3_paths_regex
         
@@ -134,7 +137,7 @@ class CrawlS3Paths:
                                   aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
                                   aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
         
-        iam_client = boto3.client('iam')
+        #iam_client = boto3.client('iam')
 
         for profile_arn in instance_profile_arn:
 
@@ -194,12 +197,12 @@ class CrawlS3Buckets:
         """
 
         # Create an IAM client
-        #s3_client = boto3.client('s3',
-        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
-        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
-        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        s3_client = boto3.client('s3',
+                                  aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+                                  aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+                                  aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
         
-        s3_client = boto3.client('s3')
+        #s3_client = boto3.client('s3')
 
         # List all buckets
         response = s3_client.list_buckets()
@@ -217,12 +220,12 @@ class CrawlS3Buckets:
         """
 
         # Create an IAM client
-        #s3_client = boto3.client('s3',
-        #                          aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
-        #                          aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
-        #                          aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
+        s3_client = boto3.client('s3',
+                                  aws_access_key_id=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_access_key_id'),
+                                  aws_secret_access_key=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_secret_access_key'),
+                                  aws_session_token=self._dbutils.secrets.get(scope=aws_secrets_scope, key='aws_session_token'))
         
-        s3_client = boto3.client('s3')
+        #s3_client = boto3.client('s3')
         volumes_list = []
         for bucket_name in s3_buckets_list:
             volumes_dict = {}
