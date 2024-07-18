@@ -1,11 +1,17 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC
-# MAGIC ##### Toyota Mortors North America - Converts exported HMS governance privileges to HCL
+# MAGIC ##### Toyota Mortors North America - Create Volumes exported to HCL for External Locations
 # MAGIC
 # MAGIC ##### Description:
-# MAGIC - This notebook will convert the exported HMS governance privileges to HCL.
+# MAGIC - This notebook will create Volumes exported to HCL for External Locations. The Volumes created serve all second-level directories of each External Location.
 # MAGIC
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Installing libraries
 
 # COMMAND ----------
 
@@ -14,6 +20,11 @@
 # COMMAND ----------
 
 dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Imports
 
 # COMMAND ----------
 
@@ -39,7 +50,8 @@ from utils.consts import *
 
 # COMMAND ----------
 
-start_time = datetime.datetime.now()
+# MAGIC %md
+# MAGIC ## Widgets
 
 # COMMAND ----------
 
@@ -47,6 +59,13 @@ dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", 
 dbutils.widgets.text("aws_secrets_scope", "hms_exporter_aws_secrets", "AWS Secret Scope")
 dbutils.widgets.text("default_catalog_name", "users", "Default Catalog Name")
 dbutils.widgets.text("default_schema_name", "wagner_silveira", "Default Schema Name")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Set variables
+
+# COMMAND ----------
 
 tf_file_dst_volume = dbutils.widgets.get("tf_file_dst_volume")
 aws_secrets_scope = dbutils.widgets.get("aws_secrets_scope")
@@ -57,6 +76,11 @@ tf_file_dst_volume = tf_file_dst_volume.rstrip("/")
 pattern = re.compile(r"^/Volumes/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$")
 if not pattern.match(tf_file_dst_volume):
     raise ValueError("Invalid volume path. Please use the format: /Volumes/catalog_name/schema_name/volume_name")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Dataframe that maps s3 bucket to catalog/schema for creating Volumes. If the s3 bucket does not have a catalog/schema mapped in this Dataframe, the Volume will be created in the default catalog/schema informed in the widgets
 
 # COMMAND ----------
 
@@ -81,6 +105,15 @@ data = [
 
 df_check_volumes = spark.createDataFrame(data, schema)
 display(df_check_volumes)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Code execution
+
+# COMMAND ----------
+
+start_time = datetime.datetime.now()
 
 # COMMAND ----------
 

@@ -1,11 +1,16 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC
-# MAGIC ##### Toyota Mortors North America - Converts exported HMS governance privileges to HCL
+# MAGIC ##### Toyota Mortors North America - Converts exported HMS governance privileges to HCL to External Locations
 # MAGIC
 # MAGIC ##### Description:
-# MAGIC - This notebook will convert the exported HMS governance privileges to HCL.
+# MAGIC - This notebook will convert HMS governance privileges exported to HCL to External Locations, being able to create External Locations that do not yet exist.
 # MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Installing libraries
 
 # COMMAND ----------
 
@@ -14,6 +19,11 @@
 # COMMAND ----------
 
 dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Imports
 
 # COMMAND ----------
 
@@ -39,7 +49,8 @@ from utils.consts import *
 
 # COMMAND ----------
 
-start_time = datetime.datetime.now()
+# MAGIC %md
+# MAGIC ## Widgets
 
 # COMMAND ----------
 
@@ -48,6 +59,13 @@ dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", 
 dbutils.widgets.text("aws_secrets_scope", "hms_exporter_aws_secrets", "AWS Secret Scope")
 dbutils.widgets.dropdown("create_new_ext_loc", "NO", ["YES", "NO"], "Create New Ext. Locations")
 dbutils.widgets.text("credential_name", "field_demos_credential", "Credential Name")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Set variables
+
+# COMMAND ----------
 
 src_table = dbutils.widgets.get("src_table")
 tf_file_dst_volume = dbutils.widgets.get("tf_file_dst_volume")
@@ -63,6 +81,15 @@ tf_file_dst_volume = tf_file_dst_volume.rstrip("/")
 pattern = re.compile(r"^/Volumes/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$")
 if not pattern.match(tf_file_dst_volume):
     raise ValueError("Invalid volume path. Please use the format: /Volumes/catalog_name/schema_name/volume_name")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Code execution
+
+# COMMAND ----------
+
+start_time = datetime.datetime.now()
 
 # COMMAND ----------
 

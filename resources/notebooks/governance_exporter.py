@@ -12,11 +12,21 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Installing libraries
+
+# COMMAND ----------
+
 # MAGIC %pip install databricks-sdk==0.25.1 --upgrade
 
 # COMMAND ----------
 
 dbutils.library.restartPython()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Imports
 
 # COMMAND ----------
 
@@ -42,10 +52,22 @@ from src.crawl_s3_paths import CrawlS3Paths
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Widgets
+
+# COMMAND ----------
+
 dbutils.widgets.text("dest_table", "users.wagner_silveira.hms_governance_update", "Destination Table Name")
 dbutils.widgets.text("aws_secrets_scope", "hms_exporter_aws_secrets", "AWS Secret Scope")
 dbutils.widgets.dropdown("principal_type", "ALL", ["ALL", "SERVICE_PRINCIPAL", "USER", "GROUP"], "Principal Type")
 dbutils.widgets.text("naming_convention_filter", "", "Naming Convention Filter")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Set variables
+
+# COMMAND ----------
 
 dest_table = dbutils.widgets.get("dest_table").strip()
 aws_secrets_scope = dbutils.widgets.get("aws_secrets_scope").strip()
@@ -55,6 +77,11 @@ naming_convention_filter = dbutils.widgets.get("naming_convention_filter")
 pattern = re.compile(r"^[a-zA-Z0-9_-]+.[a-zA-Z0-9_-]+.[a-zA-Z0-9_-]+$")
 if not pattern.match(dest_table):
     raise ValueError("Invalid destination table name. Please use the format: catalog.database.table_name")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Code execution
 
 # COMMAND ----------
 

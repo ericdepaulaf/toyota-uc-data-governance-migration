@@ -9,6 +9,11 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Imports
+
+# COMMAND ----------
+
 import re
 import logging
 import datetime
@@ -17,21 +22,21 @@ from pyspark.sql import functions as F, Column
 
 # COMMAND ----------
 
-start_time = datetime.datetime.now()
-
-# COMMAND ----------
-
-logging.basicConfig(
-    format="%(asctime)s.%(msecs)03d [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# MAGIC %md
+# MAGIC ## Widgets
 
 # COMMAND ----------
 
 dbutils.widgets.text("src_table", "wsilveira.wsilveira.tbdp_prod_grants_phase_1", "HMS privileges table")
 dbutils.widgets.text("tf_file_dst_volume", "/Volumes/users/wagner_silveira/tf", "Destination Volume for the TF file")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Set variables
+
+# COMMAND ----------
+
 hms_privileges_tbl = dbutils.widgets.get("src_table")
 tf_file_dst_volume = dbutils.widgets.get("tf_file_dst_volume")
 
@@ -50,6 +55,24 @@ HMS_UC_PRIVILEGES_MAPPING = {
     "MODIFY": ["MODIFY"],
     "CREATE_NAMED_FUNCTION": ["CREATE_FUNCTION"]
 }
+
+# COMMAND ----------
+
+logging.basicConfig(
+    format="%(asctime)s.%(msecs)03d [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Code execution
+
+# COMMAND ----------
+
+start_time = datetime.datetime.now()
 
 # COMMAND ----------
 
